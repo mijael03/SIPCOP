@@ -1,15 +1,23 @@
 import puppeteer from "puppeteer";
 
+
+
+
 (async () => {
+  const urlGenerateUuid = "https://seguridadciudadana.mininter.gob.pe/cloudgateway/msb-parteocurrencia/msbparteocurrencia/partesocurrencias/generateuuid"
+  const urlApplyEdits = "https://seguridadciudadana.mininter.gob.pe/arcgis/rest/services/sipcopm/partedeocurrencias/FeatureServer/0/applyEdits"
+  let objUuid = ""
   //const browser = await puppeteer.launch({ headless: false });
   const browser = await puppeteer.launch(
     {
+      headless: true,
       userDataDir: './cache',
       args: [
         '--no-sandbox',
         '--use-gl=egl',
         '--disable-dev-shm-usage',
-        '--disable-setuid-sandbox'
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled'
       ]
     }
   );
@@ -33,11 +41,9 @@ import puppeteer from "puppeteer";
   // Wait for the username and password fields to appear in the DOM
   await page.waitForSelector('input[formcontrolname="username"]');
   await page.waitForSelector('input[formcontrolname="password"]');
-
   // Fill in the login form
   await page.type('input[formcontrolname="username"]', 'NDELGADOD');
   await page.type('input[formcontrolname="password"]', 'SIPCOPM5068');
-
   // Submit the form
   const iniciarSesionButton = await page.$x('//button[contains(.//span, "Iniciar Sesión")]');
   await iniciarSesionButton[0].click()
@@ -51,6 +57,22 @@ import puppeteer from "puppeteer";
   }, { timeout: 45000 });
   console.log("First screen charge completed")
   await page.click('button[class="mr-2 mb-2 mat-raised-button mat-button-base mat-accent"]')
+  // Interceptamos las solicitudes de red para capturar la respuesta
+  const responseHandler = async (response) => {
+    // Verificamos si la URL de la respuesta coincide con la solicitud que nos interesa
+    if (response.url().includes(urlGenerateUuid)) {
+      // Extraemos el cuerpo de la respuesta como texto
+      const responseBody = await response.text();
+      // Convertimos el cuerpo de la respuesta en un objeto (o estructura de datos según el formato)
+      const responseObject = JSON.parse(responseBody);
+      // Accedemos a la propiedad deseada dentro del objeto
+      objUuid = responseObject.obj; // Modificar según la estructura de la respuesta
+      console.log('UUID:', objUuid);
+      // Eliminamos el event listener ahora que hemos capturado la respuesta deseada
+      page.off('response', responseHandler);
+    }
+  };
+  page.on('response', responseHandler)
   await page.waitForSelector('div[formarrayname="serenos"]')
   await page.type('input[formcontrolname="numeroDocumento"', '40414483')
   await page.click('button[aria-label="Buscar"]')
@@ -141,16 +163,17 @@ import puppeteer from "puppeteer";
     const loaderSpinner = document.getElementById('loaderSpinner');
     return loaderSpinner.style.display === 'none';
   });
+  await waitOneSecond()
   const [selectTipoVia] = await page.$x('//mat-option[contains(.//span, "CALLE")]');
-  selectTipoVia.click()
+  await selectTipoVia.click()
   const selectorDireccion = 'input[formcontrolname="direccion"]';
   await page.type(selectorDireccion, 'Ballon')
   const selectorTipoZona = 'mat-select[formcontrolname="idTipoZona"]'
   await page.waitForSelector(selectorTipoZona)
   await page.click(selectorTipoZona)
   const [selectTipoZona] = await page.$x('//mat-option[contains(.//span, "BARRIO")]');
-  selectTipoZona.click()
-  //await waitToMapCharge()
+  await selectTipoZona.click()
+  waitToMapCharge()
   await waitOneSecond()
   const selector = '.esri-view-root';
   const element = await page.$(selector)
@@ -160,75 +183,71 @@ import puppeteer from "puppeteer";
     element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' })
   }, element)
   await waitOneSecond()
+  console.log("Click en ocurrencia - before")
+  const selectOcurrencia = await page.$x('//span[normalize-space()="Ocurrencia"]')
 
-  const screenPosition = [
-    { x: 1062, y: 174 },
-    { x: 1018, y: 371 },
-    { x: 1114, y: 427 },
-    { x: 1102, y: 352 },
-    { x: 1064, y: 465 },
-    { x: 1144, y: 404 },
-    { x: 1142, y: 345 },
-    { x: 1079, y: 357 },
-    { x: 1091, y: 318 },
-    { x: 1066, y: 293 }
-  ]
+  await selectOcurrencia[1].click()
+  console.log("Click en ocurrencia")
+  const urlMap = generateURLMap(objUuid)
+  await page.screenshot({ path: 'example.png' });
+  await page.waitForResponse(response => response.url().includes(urlMap));
+  const screenPosition = calculateScreenPosition(-16.4492152, -71.5908848)
+  console.log("Before mouse move")
+  await page.mouse.move(screenPosition.x, screenPosition.y);
+  console.log("After mouse move")
 
-  /* for (const positions in screenPosition) {
-    
-  } */
-  // for(screenPosition)
-  for (let y = 0; y <= 9; y += 1) {
-    await page.mouse.move(screenPosition[y].x, screenPosition[y].y);
-    await waitForMovement()
-    let divContent = await page.evaluate((selector) => {
-      const div = document.querySelector(selector)
-      return div ? div.textContent : null
-    }, '#coordsWidget')
-    if (divContent) {
-      console.log("SCREEN POSITION: ", `x: ${screenPosition[y].x} y: ${screenPosition[y].y}`)
-      console.log("COORDENADAS: ", `x: ${divContent.slice(8, 16)} y: ${divContent.slice(17, 25)}`)
-      console.log("------------------------------------")
-    } else {
-      console.log("div not found")
-    }
-  }
-  /* await Promise.all(
-    screenPosition.map(async (positions) => {
-      await page.mouse.move(positions.x, positions.y);
-      await waitForMovement()
-      let divContent = await page.evaluate((selector) => {
-        const div = document.querySelector(selector)
-        return div ? div.textContent : null
-      }, '#coordsWidget')
-      console.log("DIV CONTENT", divContent)
-      if (divContent) {
-        console.log("SCREEN POSITION: ", `x: ${positions.x} y: ${positions.y}`)
-        console.log("COORDENADAS: ", `x: ${divContent.slice(8, 16)} y: ${divContent.slice(17, 25)}`)
-      } else {
-        console.log("div not found")
-      }
-    })
-  ) */
-  /* await page.mouse.move(1102, 352);
+  // Hacer clic en la posición actual del mouse
+  await page.mouse.click(screenPosition.x, screenPosition.y);
+  await waitForMovement()
   let divContent = await page.evaluate((selector) => {
     const div = document.querySelector(selector)
-    console.log("HTML", div.innerHTML)
-    console.log("TEXT CONTENT", div.textContent)
     return div ? div.textContent : null
   }, '#coordsWidget')
-  console.log("DIV CONTENT", divContent)
   if (divContent) {
-    console.log("SCREEN POSITION: ", `x: ${1102} y: ${352}`)
+    console.log("SCREEN POSITION: ", `x: ${screenPosition.x} y: ${screenPosition.y}`)
     console.log("COORDENADAS: ", `x: ${divContent.slice(8, 16)} y: ${divContent.slice(17, 25)}`)
+    console.log("------------------------------------")
   } else {
     console.log("div not found")
   }
-  await waitForMovement() */
+  await waitToMapCharge()
+  await page.setRequestInterception(true);
 
+  // Escuchar el evento 'request' para listar las solicitudes
+  page.on('request', (request) => {
+    if (request.url().includes(urlApplyEdits)) {
+      console.log("CARGÓ URL APPLY EDITS DESPUES DE SELECCIONAR OCURRENCIA")
+      console.log('Solicitud:', request.method(), request.url());
+    }else{
+      console.log("NO CARGÓ URL")
+    }
+    request.continue(); // Continuar con la solicitud
+  });
+  console.log("Justo antes de hacer click")
+  await page.click('#btnUpdate')
+  console.log("Justo después de hacer click")
+  await page.waitForResponse(response => response.url().includes(urlApplyEdits));
+  const selectorEstadoOcurrencia = 'mat-select[formcontrolname="idEstadoOcurrencia"]'
+  await page.waitForSelector(selectorEstadoOcurrencia)
+  await page.click(selectorEstadoOcurrencia)
+  const [selectEstadoOcurrencia] = await page.$x('//mat-option[contains(.//span, "EN PROCESO")]');
+  await selectEstadoOcurrencia.click()
+  /* const registrarOcurrenciaSelector = '//button[contains(.//span, "Registrar")]'
+  const [registrarOcurrenciaButton] = await page.$x(registrarOcurrenciaSelector)
+  await registrarOcurrenciaButton.click() */
+  await waitToMapCharge()
   await page.screenshot({ path: 'example.png' });
+  const divSelector = 'div img[src="./assets/images/avatars/1.jpg"]';
+  const divElement = await page.$(divSelector);
+  await divElement.click()
+  const logoutButtonSelector = '//button[contains(.//span, "Cerrar Sesión")]'
+  const [logoutButton] = await page.$x(logoutButtonSelector)
+  await logoutButton.click()
+  await waitToMapCharge()
+  await page.screenshot({ path: 'example1.png' });
   await browser.close();
-})();
+})()
+
 
 async function waitOneSecond() {
   return new Promise(resolve => {
@@ -242,6 +261,25 @@ async function waitForMovement() {
 }
 async function waitToMapCharge() {
   return new Promise(resolve => {
-    setTimeout(resolve, 60000);
+    setTimeout(resolve, 6000);
   });
+}
+
+const calculateScreenPosition = (latitude, longitude) => {
+  const coeficientX1 = -5.23705582e-01
+  const coeficientX2 = 5.83639149e+03
+
+  const coeficientY1 = -6.07778970e+03
+  const coeficientY2 = -4.47007937e+00
+
+  const interceptX = 418975.03892783
+  const interceptY = -99841.30305214
+
+  const positionX = interceptX + coeficientX1 * latitude + coeficientX2 * longitude
+  const positionY = interceptY + coeficientY1 * latitude + coeficientY2 * longitude
+  return { x: positionX, y: positionY }
+
+}
+const generateURLMap = (uuid) => {
+  return `https://seguridadciudadana.mininter.gob.pe/arcgis/rest/services/sipcopm/partedeocurrencias/FeatureServer/0/query?f=json&returnIdsOnly=true&returnCountOnly=true&spatialRel=esriSpatialRelIntersects&where=id_dist%3D%27040123%27%20and%20idocurrencia%3D%27${uuid}%27%20and%20estado%3D%27EN_PROCESO%27&token=`
 }
