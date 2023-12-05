@@ -1,8 +1,5 @@
 import puppeteer from "puppeteer";
 
-
-
-
 (async () => {
   const urlGenerateUuid = "https://seguridadciudadana.mininter.gob.pe/cloudgateway/msb-parteocurrencia/msbparteocurrencia/partesocurrencias/generateuuid"
   const urlApplyEdits = "https://seguridadciudadana.mininter.gob.pe/arcgis/rest/services/sipcopm/partedeocurrencias/FeatureServer/0/applyEdits"
@@ -145,7 +142,6 @@ import puppeteer from "puppeteer";
   await siguienteButton2.click()
   const selectorIdentificacionAutor = 'mat-select[formcontrolname="idIdentificacionAutor"]';
   await page.waitForSelector(selectorIdentificacionAutor, { visible: true, timeout: 3000 });
-  // Once the element is present, click it
   await page.click(selectorIdentificacionAutor)
   const [selectIdentificacionAutor] = await page.$x('//mat-option[contains(.//span, "NO IDENTIFICADO")]');
   await selectIdentificacionAutor.click()
@@ -157,7 +153,6 @@ import puppeteer from "puppeteer";
   await siguienteButton3.click()
   const selectorTipoVia = 'mat-select[formcontrolname="idTipoVia"]';
   await page.waitForSelector(selectorTipoVia, { visible: true, timeout: 3000 });
-  // Once the element is present, click it
   await page.click(selectorTipoVia)
   await page.waitForFunction(() => {
     const loaderSpinner = document.getElementById('loaderSpinner');
@@ -173,8 +168,7 @@ import puppeteer from "puppeteer";
   await page.click(selectorTipoZona)
   const [selectTipoZona] = await page.$x('//mat-option[contains(.//span, "BARRIO")]');
   await selectTipoZona.click()
-  waitToMapCharge()
-  await waitOneSecond()
+  await waitToMapCharge()
   const selector = '.esri-view-root';
   const element = await page.$(selector)
   await waitOneSecond()
@@ -183,49 +177,17 @@ import puppeteer from "puppeteer";
     element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' })
   }, element)
   await waitOneSecond()
-  console.log("Click en ocurrencia - before")
   const selectOcurrencia = await page.$x('//span[normalize-space()="Ocurrencia"]')
-
   await selectOcurrencia[1].click()
-  console.log("Click en ocurrencia")
   const urlMap = generateURLMap(objUuid)
   await page.screenshot({ path: 'example.png' });
   await page.waitForResponse(response => response.url().includes(urlMap));
   const screenPosition = calculateScreenPosition(-16.4492152, -71.5908848)
-  console.log("Before mouse move")
   await page.mouse.move(screenPosition.x, screenPosition.y);
-  console.log("After mouse move")
-
-  // Hacer clic en la posición actual del mouse
   await page.mouse.click(screenPosition.x, screenPosition.y);
   await waitForMovement()
-  let divContent = await page.evaluate((selector) => {
-    const div = document.querySelector(selector)
-    return div ? div.textContent : null
-  }, '#coordsWidget')
-  if (divContent) {
-    console.log("SCREEN POSITION: ", `x: ${screenPosition.x} y: ${screenPosition.y}`)
-    console.log("COORDENADAS: ", `x: ${divContent.slice(8, 16)} y: ${divContent.slice(17, 25)}`)
-    console.log("------------------------------------")
-  } else {
-    console.log("div not found")
-  }
   await waitToMapCharge()
-  await page.setRequestInterception(true);
-
-  // Escuchar el evento 'request' para listar las solicitudes
-  page.on('request', (request) => {
-    if (request.url().includes(urlApplyEdits)) {
-      console.log("CARGÓ URL APPLY EDITS DESPUES DE SELECCIONAR OCURRENCIA")
-      console.log('Solicitud:', request.method(), request.url());
-    }else{
-      console.log("NO CARGÓ URL")
-    }
-    request.continue(); // Continuar con la solicitud
-  });
-  console.log("Justo antes de hacer click")
   await page.click('#btnUpdate')
-  console.log("Justo después de hacer click")
   await page.waitForResponse(response => response.url().includes(urlApplyEdits));
   const selectorEstadoOcurrencia = 'mat-select[formcontrolname="idEstadoOcurrencia"]'
   await page.waitForSelector(selectorEstadoOcurrencia)
